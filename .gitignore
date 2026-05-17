@@ -1,0 +1,28 @@
+*.o
+*.ko
+*.mod
+*.mod.c
+*.order
+*.symvers
+.tmp_versions/
+Module.symvers
+modules.order
+/.cache/
+# Doxygen output
+docs/doxygen/
+
+# Regression reports
+waveusbcan_b-regression-*/
+*.log
+*.err
+
+# Kernel/DKMS build products
+*.ko
+*.ko.xz
+*.o
+*.mod
+*.mod.c
+Module.symvers
+modules.order
+.tmp_versions/
+

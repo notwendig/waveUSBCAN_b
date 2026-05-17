@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  source-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck doxygen make gcc || true
+      - name: ShellCheck scripts
+        run: |
+          shellcheck scripts/*.sh
+      - name: Doxygen warnings check
+        run: |
+          doxygen Doxyfile
+      - name: Kernel build if headers are available
+        run: |
+          if [ -d "/lib/modules/$(uname -r)/build" ]; then
+            make
+          else
+            echo "No matching runner kernel headers; skipping kernel module compile."
+          fi

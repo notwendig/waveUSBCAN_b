@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Jürgen W. Sievers and OpenAI ChatGPT
+# Authors: Jürgen W. Sievers; OpenAI ChatGPT
+#
+# waveUSBCAN_b / Waveshare USB-CAN-B / CANalyst-II compatible adapter
+# The kernel module has a USB MODULE_DEVICE_TABLE and should autoload after depmod.
+# This rule adds a useful systemd tag and keeps the device visible to desktop tools.
+SUBSYSTEM=="usb", ATTR{idVendor}=="04d8", ATTR{idProduct}=="0053", TAG+="uaccess", ENV{ID_MODEL}="waveUSBCAN_b"

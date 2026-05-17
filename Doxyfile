@@ -1,0 +1,27 @@
+# Doxyfile for waveUSBCAN_b
+PROJECT_NAME           = "waveUSBCAN_b"
+PROJECT_NUMBER         = "0.1.10"
+PROJECT_BRIEF          = "SocketCAN DKMS driver prototype for Waveshare USB-CAN-B / CANalyst-II"
+OUTPUT_DIRECTORY       = docs/doxygen
+INPUT                  = README.md docs/doxygen-mainpage.md docs/SAFETY.md docs/PROTOCOL.md docs/REVERSE_ENGINEERING.md docs/REGRESSION.md src/waveusbcan_b_main.c
+FILE_PATTERNS          = *.c *.h *.md
+RECURSIVE              = NO
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+QUIET                  = NO
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+MARKDOWN_SUPPORT       = YES
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_LATEX         = NO
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = YES
+REFERENCES_RELATION    = YES
+REFERENCED_BY_RELATION = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+HAVE_DOT               = NO
