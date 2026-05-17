@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.11
+
+- Add boot-time and USB hotplug auto-start support for both SocketCAN channels.
+- Add `scripts/auto-up.sh` installed as `/usr/local/sbin/waveusbcan_b-auto-up`.
+- Add `systemd/waveusbcan_b-auto.service` and update the udev rule to trigger it when USB ID `04d8:0053` is connected.
+- Add `docs/AUTO_START.md` and README instructions for enabling, checking, and overriding the automatic bitrate setup.
+- Keep the helper receive-safe: it configures CAN interfaces only and never sends CAN frames.
+
 ## 0.1.10
 
 - Explicitly credit **Jürgen W. Sievers** as protocol reverse-engineering contributor.

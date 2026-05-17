@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2026 Jürgen W. Sievers and OpenAI ChatGPT
+# Authors: Jürgen W. Sievers; OpenAI ChatGPT
+
+[Unit]
+Description=Auto-configure waveUSBCAN_b SocketCAN interfaces
+Documentation=file:/usr/src/waveUSBCAN_b-0.1.11/docs/AUTO_START.md
+After=systemd-udevd.service
+Wants=systemd-udevd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/waveusbcan_b-auto-up --bitrate 125000 --interfaces can0,can1 --wait 20 --restart-ms 0
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

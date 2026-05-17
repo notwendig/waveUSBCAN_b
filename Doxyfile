@@ -1,6 +1,6 @@
 # Doxyfile for waveUSBCAN_b
 PROJECT_NAME           = "waveUSBCAN_b"
-PROJECT_NUMBER         = "0.1.10"
+PROJECT_NUMBER         = "0.1.11"
 PROJECT_BRIEF          = "SocketCAN DKMS driver prototype for Waveshare USB-CAN-B / CANalyst-II"
 OUTPUT_DIRECTORY       = docs/doxygen
 INPUT                  = README.md docs/doxygen-mainpage.md docs/SAFETY.md docs/PROTOCOL.md docs/REVERSE_ENGINEERING.md docs/REGRESSION.md src/waveusbcan_b_main.c

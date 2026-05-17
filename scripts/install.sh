@@ -83,6 +83,18 @@ if [[ -f "$SRC_DIR/udev/99-waveusbcan-b.rules" ]]; then
   udevadm control --reload-rules || true
 fi
 
+if [[ -f "$SRC_DIR/scripts/auto-up.sh" ]]; then
+  echo "[*] Installing auto-up helper"
+  install -m 0755 "$SRC_DIR/scripts/auto-up.sh" /usr/local/sbin/waveusbcan_b-auto-up
+fi
+
+if [[ -f "$SRC_DIR/systemd/waveusbcan_b-auto.service" ]]; then
+  echo "[*] Installing systemd auto-start service"
+  install -m 0644 "$SRC_DIR/systemd/waveusbcan_b-auto.service" /etc/systemd/system/waveusbcan_b-auto.service
+  systemctl daemon-reload || true
+  systemctl enable waveusbcan_b-auto.service || true
+fi
+
 if [[ -f "$SRC_DIR/modprobe.d/waveusbcan_b.conf" && ! -f /etc/modprobe.d/waveusbcan_b.conf ]]; then
   echo "[*] Installing default modprobe config"
   install -m 0644 "$SRC_DIR/modprobe.d/waveusbcan_b.conf" /etc/modprobe.d/waveusbcan_b.conf
@@ -98,5 +110,11 @@ modprobe waveusbcan_b || {
   exit 1
 }
 
+if systemctl list-unit-files waveusbcan_b-auto.service >/dev/null 2>&1; then
+  echo "[*] Starting auto-start service once"
+  systemctl start waveusbcan_b-auto.service || true
+fi
+
 echo "[OK] Installed and loaded waveusbcan_b"
 echo "Next: unplug/replug adapter, then run: ip -details link show type can"
+echo "Auto-start: systemctl status waveusbcan_b-auto.service"

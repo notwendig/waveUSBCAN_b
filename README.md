@@ -1,6 +1,6 @@
 # waveUSBCAN_b
 
-Version 0.1.10 is the protocol reverse-engineering attribution release. It keeps the proven v0.1.7+ SocketCAN bring-up path, the v0.1.8 dual-channel/bitrate regression tooling, the v0.1.9 GitHub/Doxygen cleanup, and explicitly documents Jürgen W. Sievers as the protocol reverse-engineering contributor for local hardware observations and R-Net bench captures.
+Version 0.1.11 adds boot and hotplug auto-start support for both SocketCAN channels while keeping the proven v0.1.7+ bring-up path, the v0.1.8 dual-channel/bitrate regression tooling, the v0.1.9 GitHub/Doxygen cleanup, and the v0.1.10 protocol reverse-engineering attribution documentation.
 
 Out-of-tree DKMS Linux SocketCAN driver prototype for Waveshare USB-CAN-B / Chuangxin CANalyst-II style USB-CAN adapters.
 
@@ -36,6 +36,7 @@ Important documents:
 - [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — reverse-engineered protocol notes.
 - [`docs/REVERSE_ENGINEERING.md`](docs/REVERSE_ENGINEERING.md) — attribution, method, evidence handling, and safety boundaries for reverse-engineering work.
 - [`docs/REGRESSION.md`](docs/REGRESSION.md) — dual-channel and bitrate regression tests.
+- [`docs/AUTO_START.md`](docs/AUTO_START.md) — boot and USB hotplug auto-start for both channels.
 - [`examples/open-rnet-quickstart.md`](examples/open-rnet-quickstart.md) — open-rnet usage with SocketCAN.
 
 ## Features
@@ -67,8 +68,8 @@ candump can0
 
 ```bash
 sudo dnf install -y gcc make dkms kernel-devel kernel-headers elfutils-libelf-devel iproute can-utils usbutils
-unzip waveUSBCAN_b-0.1.10.zip
-cd waveUSBCAN_b-0.1.10
+unzip waveUSBCAN_b-0.1.11.zip
+cd waveUSBCAN_b-0.1.11
 sudo ./scripts/install.sh
 ```
 
@@ -96,10 +97,40 @@ On Fedora it is normal that `dnf` installs a newer kernel while DKMS still build
 ```bash
 sudo apt update
 sudo apt install -y build-essential dkms linux-headers-$(uname -r) iproute2 can-utils usbutils
-unzip waveUSBCAN_b-0.1.10.zip
-cd waveUSBCAN_b-0.1.10
+unzip waveUSBCAN_b-0.1.11.zip
+cd waveUSBCAN_b-0.1.11
 sudo ./scripts/install.sh
 ```
+
+
+## Automatic boot and hotplug setup
+
+The installer places a receive-safe helper and systemd service on the host:
+
+```bash
+/usr/local/sbin/waveusbcan_b-auto-up
+/etc/systemd/system/waveusbcan_b-auto.service
+```
+
+The service configures both channels at R-Net speed by default:
+
+```bash
+sudo systemctl enable --now waveusbcan_b-auto.service
+```
+
+When the adapter is plugged in later, the udev rule for USB ID `04d8:0053`
+starts the same service again. The helper only configures SocketCAN interfaces;
+it never transmits CAN frames.
+
+Check with:
+
+```bash
+systemctl status waveusbcan_b-auto.service
+journalctl -u waveusbcan_b-auto.service -b --no-pager
+ip -details link show type can
+```
+
+See [`docs/AUTO_START.md`](docs/AUTO_START.md) for changing bitrate or interface names.
 
 ## R-Net setup
 

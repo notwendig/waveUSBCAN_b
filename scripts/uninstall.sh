@@ -22,6 +22,12 @@ set -e
 
 dkms remove -m "$PKG_NAME" -v "$PKG_VER" --all || true
 rm -rf "/usr/src/${PKG_NAME}-${PKG_VER}"
+
+systemctl disable --now waveusbcan_b-auto.service 2>/dev/null || true
+rm -f /etc/systemd/system/waveusbcan_b-auto.service
+rm -f /usr/local/sbin/waveusbcan_b-auto-up
+systemctl daemon-reload || true
+
 rm -f /etc/udev/rules.d/99-waveusbcan-b.rules
 udevadm control --reload-rules || true
 depmod -a
