@@ -189,12 +189,12 @@ active_pair_test() {
   wait "$pid_ab" >/dev/null 2>&1 || true
   wait "$pid_ba" >/dev/null 2>&1 || true
 
-  if grep -q " ${ida} " "$cap_ab"; then
+  if grep -Eq "(^|[[:space:]])${ida}#" "$cap_ab"; then
     mark_pass "active bench ${tx_a}->${rx_b} @ ${br}: saw ID ${ida}"
   else
     mark_fail "active bench ${tx_a}->${rx_b} @ ${br}: did not see ID ${ida}; see ${cap_ab}"
   fi
-  if grep -q " ${idb} " "$cap_ba"; then
+  if grep -Eq "(^|[[:space:]])${idb}#" "$cap_ba"; then
     mark_pass "active bench ${tx_b}->${rx_a} @ ${br}: saw ID ${idb}"
   else
     mark_fail "active bench ${tx_b}->${rx_a} @ ${br}: did not see ID ${idb}; see ${cap_ba}"
