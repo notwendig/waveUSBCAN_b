@@ -73,6 +73,8 @@ USAGE
 }
 
 log() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
+# helper kept for optional verbose command tracing
+# shellcheck disable=SC2329
 run() {
   if [[ "$VERBOSE" == "1" ]]; then echo "+ $*" | tee -a "$SUMMARY"; fi
   "$@"
@@ -96,6 +98,8 @@ is_iface_present() {
   ip link show "$1" >/dev/null 2>&1
 }
 
+# diagnostic helper kept for manual debugging
+# shellcheck disable=SC2329
 iface_state_line() {
   ip -details link show "$1" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g'
 }

@@ -26,3 +26,5 @@ Module.symvers
 modules.order
 .tmp_versions/
 
+/docs/doxygen/
+.vscode/
