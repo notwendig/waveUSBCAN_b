@@ -3,6 +3,7 @@
 #define WAVEUSBCAN_B_H
 
 #include <linux/atomic.h>
+#include <linux/bitops.h>
 #include <linux/can.h>
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
@@ -52,6 +53,16 @@ enum wuc_command {
 	WUC_CMD_CAN_STATUS = 0x0b,
 };
 
+/** Per-channel lifecycle flags used to stop asynchronous work safely. */
+enum wuc_priv_flag {
+	WUC_PRIV_SHUTDOWN = 0,
+};
+
+/** Per-device lifecycle flags used while the USB interface is disconnecting. */
+enum wuc_device_flag {
+	WUC_DEV_DISCONNECTING = 0,
+};
+
 /**
  * struct wuc_timing - Firmware bitrate entry.
  * @bitrate: User-visible CAN bitrate in bit/s as accepted by SocketCAN.
@@ -86,6 +97,7 @@ struct wuc_device;
  * @timing1: Selected firmware BTR1 value.
  * @timing_valid: True after a supported SocketCAN bitrate was selected.
  * @pm_held: True if runtime-PM was successfully held during open().
+ * @flags: Per-channel lifecycle flags; see enum wuc_priv_flag.
  */
 struct wuc_priv {
 	struct can_priv can;
@@ -102,6 +114,7 @@ struct wuc_priv {
 	u8 timing1;
 	bool timing_valid;
 	bool pm_held;
+	unsigned long flags;
 };
 
 /**
@@ -114,6 +127,7 @@ struct wuc_priv {
  * @present_bulk_in: Bit map of discovered bulk IN endpoint numbers.
  * @present_bulk_out: Bit map of discovered bulk OUT endpoint numbers.
  * @usb_lock: Serializes synchronous USB command/status transfers.
+ * @flags: Per-device lifecycle flags; see enum wuc_device_flag.
  */
 struct wuc_device {
 	struct usb_device *udev;
@@ -124,6 +138,7 @@ struct wuc_device {
 	unsigned long present_bulk_in;
 	unsigned long present_bulk_out;
 	struct mutex usb_lock;
+	unsigned long flags;
 };
 
 /**

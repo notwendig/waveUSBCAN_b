@@ -590,6 +590,27 @@ static void wuc_parse_rx_packet(struct wuc_priv *priv, const u8 *packet)
 }
 
 /**
+ * wuc_rx_should_run() - Check whether RX polling is still allowed.
+ * @priv: Per-channel state.
+ *
+ * The delayed RX worker can overlap with netdevice close() and USB
+ * disconnect().  This helper keeps all rescheduling decisions tied to both
+ * the channel open state and the parent USB device teardown state.
+ *
+ * Return: true while the channel is open and the USB device is not tearing
+ * down; false otherwise.
+ */
+static bool wuc_rx_should_run(struct wuc_priv *priv)
+{
+	struct wuc_device *wdev = priv->parent;
+
+	return atomic_read(&priv->opened) &&
+	       !test_bit(WUC_PRIV_SHUTDOWN, &priv->flags) &&
+	       wdev &&
+	       !test_bit(WUC_DEV_DISCONNECTING, &wdev->flags);
+}
+
+/**
  * wuc_rx_work() - Polling RX worker for one CAN channel.
  * @work: Delayed work item embedded in struct wuc_priv.
  *
@@ -611,7 +632,7 @@ static void wuc_rx_work(struct work_struct *work)
 	int actual;
 	int i;
 
-	if (!atomic_read(&priv->opened))
+	if (!wuc_rx_should_run(priv))
 		return;
 
 	ret = wuc_get_msg_status(priv, &rx_pending, &tx_pending);
@@ -623,6 +644,9 @@ static void wuc_rx_work(struct work_struct *work)
 	if (!rx_pending)
 		goto reschedule;
 
+	if (!wuc_rx_should_run(priv))
+		goto reschedule;
+
 	packets = DIV_ROUND_UP(rx_pending, WUC_MSGS_PER_PACKET) + 1;
 	if (packets > WUC_MAX_RX_PACKETS)
 		packets = WUC_MAX_RX_PACKETS;
@@ -631,6 +655,11 @@ static void wuc_rx_work(struct work_struct *work)
 	buf = kzalloc(len, GFP_KERNEL);
 	if (!buf) {
 		stats->rx_dropped++;
+		goto reschedule;
+	}
+
+	if (!wuc_rx_should_run(priv)) {
+		kfree(buf);
 		goto reschedule;
 	}
 
@@ -650,7 +679,7 @@ static void wuc_rx_work(struct work_struct *work)
 	kfree(buf);
 
 reschedule:
-	if (atomic_read(&priv->opened)) {
+	if (wuc_rx_should_run(priv)) {
 		int delay = poll_interval_ms;
 
 		if (delay < 1)
@@ -807,6 +836,11 @@ static int wuc_open(struct net_device *netdev)
 	struct wuc_priv *priv = netdev_priv(netdev);
 	int ret;
 
+	if (test_bit(WUC_DEV_DISCONNECTING, &priv->parent->flags))
+		return -ENODEV;
+
+	clear_bit(WUC_PRIV_SHUTDOWN, &priv->flags);
+
 	if (debug_open)
 		netdev_info(netdev,
 			    "open requested: channel=%u cmd_ep=%u msg_ep=%u bitrate=%u timing_valid=%d\n",
@@ -906,11 +940,13 @@ static int wuc_close(struct net_device *netdev)
 {
 	struct wuc_priv *priv = netdev_priv(netdev);
 
+	set_bit(WUC_PRIV_SHUTDOWN, &priv->flags);
 	atomic_set(&priv->opened, 0);
 	netif_stop_queue(netdev);
 	cancel_delayed_work_sync(&priv->rx_work);
 	usb_kill_anchored_urbs(&priv->tx_anchor);
-	wuc_send_simple_command(priv, WUC_CMD_STOP);
+	if (!test_bit(WUC_DEV_DISCONNECTING, &priv->parent->flags))
+		wuc_send_simple_command(priv, WUC_CMD_STOP);
 	priv->can.state = CAN_STATE_STOPPED;
 	close_candev(netdev);
 	if (priv->pm_held) {
@@ -1088,6 +1124,7 @@ static int wuc_register_channel(struct wuc_device *wdev, int channel)
 	priv->msg_ep = wdev->msg_ep[channel];
 	atomic_set(&priv->opened, 0);
 	atomic_set(&priv->tx_busy, 0);
+	priv->flags = 0;
 	init_usb_anchor(&priv->tx_anchor);
 	INIT_DELAYED_WORK(&priv->rx_work, wuc_rx_work);
 
@@ -1129,6 +1166,16 @@ static void wuc_unregister_channel(struct wuc_device *wdev, int channel)
 	if (!netdev)
 		return;
 
+	{
+		struct wuc_priv *priv = netdev_priv(netdev);
+
+		set_bit(WUC_PRIV_SHUTDOWN, &priv->flags);
+		atomic_set(&priv->opened, 0);
+		netif_stop_queue(netdev);
+		cancel_delayed_work_sync(&priv->rx_work);
+		usb_kill_anchored_urbs(&priv->tx_anchor);
+	}
+
 	unregister_candev(netdev);
 	free_candev(netdev);
 	wdev->netdev[channel] = NULL;
@@ -1146,6 +1193,7 @@ static int wuc_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 	wdev->udev = usb_get_dev(interface_to_usbdev(intf));
 	wdev->intf = intf;
+	wdev->flags = 0;
 	mutex_init(&wdev->usb_lock);
 	usb_set_intfdata(intf, wdev);
 	usb_disable_autosuspend(wdev->udev);
@@ -1188,6 +1236,8 @@ static void wuc_disconnect(struct usb_interface *intf)
 	usb_set_intfdata(intf, NULL);
 	if (!wdev)
 		return;
+
+	set_bit(WUC_DEV_DISCONNECTING, &wdev->flags);
 
 	for (ch = 0; ch < WUC_CHANNELS; ch++) {
 		if (wdev->netdev[ch])
