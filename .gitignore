@@ -5,6 +5,7 @@
 *.order
 *.symvers
 *.cmd
+*.d
 .tmp_versions/
 Module.symvers
 modules.order

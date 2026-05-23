@@ -1,57 +1,56 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/**
- * @file waveusbcan_b.h
- * @brief Native SocketCAN USB driver prototype for Waveshare USB-CAN-B /
- *        Chuangxin CANalyst-II compatible adapters.
- *
- * @details
- * waveUSBCAN_b is an out-of-tree DKMS Linux kernel module that binds to
- * vendor-specific USB-CAN adapters with USB ID 04d8:0053 and exposes both
- * CAN channels as classical SocketCAN network devices. The implementation is
- * intentionally conservative: fixed bitrates known from the public
- * reverse-engineered CANalyst-II command set, polling based RX, one outstanding
- * TX echo slot per channel, and extensive diagnostics around USB endpoint
- * selection.
- *
- * Protocol reverse-engineering attribution belongs to Jürgen W. Sievers for
- * local endpoint validation, SocketCAN testing and R-Net bench captures.
- *
- * This driver was developed for bench integration of R-Net / powered wheelchair
- * research setups. Treat any live wheelchair bus as safety-critical: passive
- * capture and controlled bench tests first; never transmit guessed control
- * frames to a person-carrying mobility device.
- *
- * @author Jürgen W. Sievers <project owner, protocol reverse engineering,
- * hardware testing, R-Net bench use>
- * @author OpenAI ChatGPT <driver generation, documentation, regression tooling>
- * @copyright Copyright (C) 2026 Jürgen W. Sievers and OpenAI ChatGPT
- * @license GPL-2.0-only
- */
+#ifndef WAVEUSBCAN_B_H
+#define WAVEUSBCAN_B_H
+
+#include <linux/atomic.h>
+#include <linux/can.h>
+#include <linux/can/dev.h>
+#include <linux/can/error.h>
+#include <linux/can/length.h>
+#include <linux/can/skb.h>
+#include <linux/delay.h>
+#include <linux/errno.h>
+#include <linux/if_ether.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/netdevice.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/usb.h>
+#include <linux/version.h>
+#include <linux/workqueue.h>
 
 #define WUC_DRIVER_NAME "waveusbcan_b"
 #define WUC_DRIVER_DESC "SocketCAN driver prototype for Waveshare USB-CAN-B / CANalyst-II"
-#define WUC_VENDOR_ID 0x04d8
-#define WUC_PRODUCT_ID 0x0053
 
-#define WUC_CHANNELS 2
-#define WUC_USB_PACKET_SIZE 64
-#define WUC_CAN_MSG_SIZE 21
-#define WUC_MSGS_PER_PACKET 3
-#define WUC_ECHO_SKB_MAX 1
+enum wuc_driver_constant {
+	WUC_VENDOR_ID = 0x04d8,
+	WUC_PRODUCT_ID = 0x0053,
 
-#define WUC_DEFAULT_USB_TIMEOUT_MS 1000
-#define WUC_DEFAULT_POLL_MS 20
-#define WUC_MAX_RX_PACKETS 64
+	WUC_CHANNELS = 2,
+	WUC_USB_PACKET_SIZE = 64,
+	WUC_CAN_MSG_SIZE = 21,
+	WUC_MSGS_PER_PACKET = 3,
+	WUC_ECHO_SKB_MAX = 1,
 
-typedef enum : u32 {
-  WUC_CMD_INIT = 0x01,
-  WUC_CMD_START = 0x02,
-  WUC_CMD_STOP = 0x03,
-  WUC_CMD_CLEAR_RX = 0x05,
-  WUC_CMD_DEVICE_RESET = 0x07,
-  WUC_CMD_MSG_STATUS = 0x0a,
-  WUC_CMD_CAN_STATUS = 0x0b
-} wuc_cmd_t;
+	WUC_DEFAULT_USB_TIMEOUT_MS = 1000,
+	WUC_DEFAULT_POLL_MS = 20,
+	WUC_MAX_RX_PACKETS = 64,
+};
+
+enum wuc_channel {
+	WUC_CHANNEL_0 = 0,
+	WUC_CHANNEL_1 = 1,
+};
+
+enum wuc_command {
+	WUC_CMD_INIT = 0x01,
+	WUC_CMD_START = 0x02,
+	WUC_CMD_STOP = 0x03,
+	WUC_CMD_CLEAR_RX = 0x05,
+	WUC_CMD_MSG_STATUS = 0x0a,
+	WUC_CMD_CAN_STATUS = 0x0b,
+};
 
 /**
  * struct wuc_timing - Firmware bitrate entry.
@@ -64,7 +63,79 @@ typedef enum : u32 {
  * rates and this driver converts it to the BTR pair expected by COMMAND_INIT.
  */
 struct wuc_timing {
-  u32 bitrate;
-  u8 timing0;
-  u8 timing1;
+	u32 bitrate;
+	u8 timing0;
+	u8 timing1;
 };
+
+struct wuc_device;
+
+/**
+ * struct wuc_priv - Per-SocketCAN-channel private state.
+ * @can: Embedded SocketCAN state managed by the CAN core.
+ * @netdev: Linux network device exposed as can0/can1.
+ * @parent: Shared USB device state.
+ * @rx_work: Delayed polling worker used to read received CAN packets.
+ * @tx_anchor: Anchor for outstanding USB TX URBs.
+ * @opened: Non-zero while the netdev is administratively up.
+ * @tx_busy: One-frame TX back-pressure flag matching WUC_ECHO_SKB_MAX.
+ * @channel: Adapter channel index, 0 or 1.
+ * @cmd_ep: Bidirectional command endpoint number without the 0x80 IN bit.
+ * @msg_ep: Bidirectional CAN message endpoint number without the 0x80 IN bit.
+ * @timing0: Selected firmware BTR0 value.
+ * @timing1: Selected firmware BTR1 value.
+ * @timing_valid: True after a supported SocketCAN bitrate was selected.
+ * @pm_held: True if runtime-PM was successfully held during open().
+ */
+struct wuc_priv {
+	struct can_priv can;
+	struct net_device *netdev;
+	struct wuc_device *parent;
+	struct delayed_work rx_work;
+	struct usb_anchor tx_anchor;
+	atomic_t opened;
+	atomic_t tx_busy;
+	u8 channel;
+	u8 cmd_ep;
+	u8 msg_ep;
+	u8 timing0;
+	u8 timing1;
+	bool timing_valid;
+	bool pm_held;
+};
+
+/**
+ * struct wuc_device - USB adapter state shared by both CAN channels.
+ * @udev: Referenced USB device.
+ * @intf: Claimed USB interface.
+ * @netdev: Registered SocketCAN netdevices for both channels.
+ * @cmd_ep: Selected command endpoint per channel.
+ * @msg_ep: Selected CAN message endpoint per channel.
+ * @present_bulk_in: Bit map of discovered bulk IN endpoint numbers.
+ * @present_bulk_out: Bit map of discovered bulk OUT endpoint numbers.
+ * @usb_lock: Serializes synchronous USB command/status transfers.
+ */
+struct wuc_device {
+	struct usb_device *udev;
+	struct usb_interface *intf;
+	struct net_device *netdev[WUC_CHANNELS];
+	u8 cmd_ep[WUC_CHANNELS];
+	u8 msg_ep[WUC_CHANNELS];
+	unsigned long present_bulk_in;
+	unsigned long present_bulk_out;
+	struct mutex usb_lock;
+};
+
+/**
+ * struct wuc_tx_context - Lifetime context for asynchronous USB TX URBs.
+ * @urb: USB request block submitted on the channel message endpoint.
+ * @netdev: SocketCAN netdevice owning the transmitted skb echo slot.
+ * @buf: DMA-safe 64-byte CANalyst-II USB message packet.
+ */
+struct wuc_tx_context {
+	struct urb *urb;
+	struct net_device *netdev;
+	u8 *buf;
+};
+
+#endif /* WAVEUSBCAN_B_H */
