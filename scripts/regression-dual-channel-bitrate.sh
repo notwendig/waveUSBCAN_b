@@ -30,7 +30,7 @@ ENDPOINT_PROFILE="auto"
 MODULE_OPTS="endpoint_profile=auto autopm_on_open=0 command_ep_autodetect=1 usb_timeout_ms=1000 usb_retries=5"
 
 usage() {
-  cat <<'USAGE'
+    cat <<'USAGE'
 Usage:
   sudo ./scripts/regression-dual-channel-bitrate.sh [options]
 
@@ -72,178 +72,253 @@ Examples:
 USAGE
 }
 
-log() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
+log() {
+    printf '%s\n' "$*" | tee -a "$SUMMARY"
+}
+
 # helper kept for optional verbose command tracing
 # shellcheck disable=SC2329
 run() {
-  if [[ "$VERBOSE" == "1" ]]; then echo "+ $*" | tee -a "$SUMMARY"; fi
-  "$@"
+    if [[ "$VERBOSE" == "1" ]]; then
+        echo "+ $*" | tee -a "$SUMMARY"
+    fi
+    "$@"
 }
+
 fail_count=0
 pass_count=0
 warn_count=0
 
-mark_pass() { pass_count=$((pass_count + 1)); log "[PASS] $*"; }
-mark_fail() { fail_count=$((fail_count + 1)); log "[FAIL] $*"; }
-mark_warn() { warn_count=$((warn_count + 1)); log "[WARN] $*"; }
+mark_pass() {
+    pass_count=$((pass_count + 1))
+    log "[PASS] $*"
+}
 
+mark_fail() {
+    fail_count=$((fail_count + 1))
+    log "[FAIL] $*"
+}
+
+mark_warn() {
+    warn_count=$((warn_count + 1))
+    log "[WARN] $*"
+}
 
 split_csv() {
-  local csv="$1"
-  csv="${csv// /}"
-  IFS=',' read -r -a __split_out <<< "$csv"
+    local csv="$1"
+    csv="${csv// /}"
+    IFS=',' read -r -a __split_out <<< "$csv"
 }
 
 is_iface_present() {
-  ip link show "$1" >/dev/null 2>&1
+    ip link show "$1" >/dev/null 2>&1
 }
 
 # diagnostic helper kept for manual debugging
 # shellcheck disable=SC2329
 iface_state_line() {
-  ip -details link show "$1" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g'
+    ip -details link show "$1" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g'
 }
 
 iface_has_bitrate() {
-  local iface="$1" br="$2"
-  ip -details link show "$iface" 2>/dev/null | grep -q "bitrate ${br}"
+    local iface="$1"
+    local br="$2"
+    ip -details link show "$iface" 2>/dev/null | grep -q "bitrate ${br}"
 }
 
 capture_iface() {
-  local iface="$1" br="$2" out="$3" seconds="$4"
-  if ! command -v candump >/dev/null 2>&1; then
-    mark_warn "candump missing; skipped RX capture for ${iface} @ ${br}"
-    return 0
-  fi
-  timeout --preserve-status "${seconds}" candump -L "$iface" >"$out" 2>"${out}.err"
-  local rc=$?
-  # timeout returns 143/124 depending on signal/preserve-status; both are fine.
-  if [[ "$rc" == "0" || "$rc" == "124" || "$rc" == "143" ]]; then
-    local frames
-    frames=$(grep -c '^(' "$out" 2>/dev/null || true)
-    mark_pass "RX capture ${iface} @ ${br}: ${frames} frame(s) in ${seconds}s -> ${out}"
-  else
-    mark_warn "RX capture ${iface} @ ${br}: candump rc=${rc}; stderr=$(tr '\n' ' ' <"${out}.err" 2>/dev/null)"
-  fi
+    local iface="$1"
+    local br="$2"
+    local out="$3"
+    local seconds="$4"
+
+    if ! command -v candump >/dev/null 2>&1; then
+        mark_warn "candump missing; skipped RX capture for ${iface} @ ${br}"
+        return 0
+    fi
+
+    timeout --preserve-status "${seconds}" candump -L "$iface" >"$out" 2>"${out}.err"
+    local rc=$?
+
+    # timeout returns 143/124 depending on signal/preserve-status; both are fine.
+    if [[ "$rc" == "0" || "$rc" == "124" || "$rc" == "143" ]]; then
+        local frames
+        frames=$(grep -c '^(' "$out" 2>/dev/null || true)
+        mark_pass "RX capture ${iface} @ ${br}: ${frames} frame(s) in ${seconds}s -> ${out}"
+    else
+        mark_warn "RX capture ${iface} @ ${br}: candump rc=${rc}; stderr=$(tr '\n' ' ' <"${out}.err" 2>/dev/null)"
+    fi
 }
 
 configure_iface() {
-  local iface="$1" br="$2"
-  local logfile="$3"
-  {
-    echo "### configure ${iface} bitrate=${br}"
-    date -Is
-    ip link set "$iface" down 2>/dev/null || true
-    ip link set "$iface" type can bitrate "$br" restart-ms "$RESTART_MS"
-    ip link set "$iface" up
-    ip -details link show "$iface"
-  } >"$logfile" 2>&1
-  local rc=$?
-  if [[ "$rc" -ne 0 ]]; then
-    mark_fail "configure ${iface} @ ${br} failed rc=${rc}; see ${logfile}"
-    return "$rc"
-  fi
-  if iface_has_bitrate "$iface" "$br"; then
-    mark_pass "configured ${iface} @ ${br}"
-  else
-    mark_fail "${iface} is up attempt but bitrate ${br} not visible; see ${logfile}"
-    return 1
-  fi
+    local iface="$1"
+    local br="$2"
+    local logfile="$3"
+
+    {
+        echo "### configure ${iface} bitrate=${br}"
+        date -Is
+        ip link set "$iface" down 2>/dev/null || true
+        ip link set "$iface" type can bitrate "$br" restart-ms "$RESTART_MS"
+        ip link set "$iface" up
+        ip -details link show "$iface"
+    } >"$logfile" 2>&1
+    local rc=$?
+
+    if [[ "$rc" -ne 0 ]]; then
+        mark_fail "configure ${iface} @ ${br} failed rc=${rc}; see ${logfile}"
+        return "$rc"
+    fi
+
+    if iface_has_bitrate "$iface" "$br"; then
+        mark_pass "configured ${iface} @ ${br}"
+    else
+        mark_fail "${iface} is up attempt but bitrate ${br} not visible; see ${logfile}"
+        return 1
+    fi
+}
+
+candump_start_any() {
+    local outfile="$1"
+    local errfile="$2"
+
+    if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf -oL -eL candump -L any >"$outfile" 2>"$errfile" &
+    else
+        candump -L any >"$outfile" 2>"$errfile" &
+    fi
+    echo "$!"
 }
 
 active_pair_test() {
-  local br="$1" tx_a="$2" rx_b="$3" tx_b="$4" rx_a="$5" outprefix="$6"
-  if [[ "$ALLOW_TX" != "1" || "$BENCH_LOOPBACK" != "1" ]]; then
-    return 0
-  fi
-  if ! command -v cansend >/dev/null 2>&1 || ! command -v candump >/dev/null 2>&1; then
-    mark_warn "cansend/candump missing; skipped active bench TX/RX @ ${br}"
-    return 0
-  fi
+    local br="$1"
+    local run_idx="$2"
+    local tx_a="$3"
+    local rx_b="$4"
+    local tx_b="$5"
+    local rx_a="$6"
+    local outprefix="$7"
 
-  local ida idb data_a data_b
-  # Keep standard IDs, below 0x7ff, and far away from common R-Net low control IDs.
-  ida=$(printf "%03X" $((0x${TX_ID_BASE} & 0x7F0)))
-  idb=$(printf "%03X" $(((0x${TX_ID_BASE} + 0x0F) & 0x7FF)))
-  data_a=$(printf "A1%06X" "$br" | cut -c1-8)
-  data_b=$(printf "B2%06X" "$br" | cut -c1-8)
+    if [[ "$ALLOW_TX" != "1" || "$BENCH_LOOPBACK" != "1" ]]; then
+        return 0
+    fi
 
-  local cap_ab="${outprefix}_${tx_a}_to_${rx_b}.log"
-  local cap_ba="${outprefix}_${tx_b}_to_${rx_a}.log"
+    if ! command -v cansend >/dev/null 2>&1 || ! command -v candump >/dev/null 2>&1; then
+        mark_warn "cansend/candump missing; skipped active bench TX/RX @ ${br}"
+        return 0
+    fi
 
-  timeout $((RX_SECONDS + 2)) candump -L "$rx_b" >"$cap_ab" 2>"${cap_ab}.err" &
-  local pid_ab=$!
-  timeout $((RX_SECONDS + 2)) candump -L "$rx_a" >"$cap_ba" 2>"${cap_ba}.err" &
-  local pid_ba=$!
-  sleep 0.4
+    local base ida idb data_a data_b run_hex
+    # Keep standard IDs below 0x7ff, far away from common R-Net low control IDs.
+    # Add the run index so repeated bitrates cannot reuse stale IDs/log matches.
+    base=$((0x${TX_ID_BASE} & 0x7E0))
+    ida=$(printf "%03X" $(((base + run_idx) & 0x7FF)))
+    idb=$(printf "%03X" $(((base + 0x10 + run_idx) & 0x7FF)))
+    run_hex=$(printf "%02X" $((run_idx & 0xFF)))
+    data_a=$(printf "A1%s%06X%02X" "$run_hex" "$br" 0 | cut -c1-16)
+    data_b=$(printf "B2%s%06X%02X" "$run_hex" "$br" 0 | cut -c1-16)
 
-  for ((i=0; i<TX_COUNT; i++)); do
-    cansend "$tx_a" "${ida}#${data_a}" >>"${outprefix}_tx.log" 2>&1 || true
-    sleep "$TX_DELAY"
-    cansend "$tx_b" "${idb}#${data_b}" >>"${outprefix}_tx.log" 2>&1 || true
-    sleep "$TX_DELAY"
-  done
+    local any_log="${outprefix}_any.log"
+    local tx_log="${outprefix}_tx.log"
+    local stats_log="${outprefix}_stats.log"
+    : >"$any_log"
+    : >"$tx_log"
+    : >"$stats_log"
 
-  sleep 0.5
-  kill "$pid_ab" "$pid_ba" >/dev/null 2>&1 || true
-  wait "$pid_ab" >/dev/null 2>&1 || true
-  wait "$pid_ba" >/dev/null 2>&1 || true
+    local pid
+    pid=$(candump_start_any "$any_log" "${any_log}.err")
+    sleep 0.5
 
-  if grep -Eq "(^|[[:space:]])${ida}#" "$cap_ab"; then
-    mark_pass "active bench ${tx_a}->${rx_b} @ ${br}: saw ID ${ida}"
-  else
-    mark_fail "active bench ${tx_a}->${rx_b} @ ${br}: did not see ID ${ida}; see ${cap_ab}"
-  fi
-  if grep -Eq "(^|[[:space:]])${idb}#" "$cap_ba"; then
-    mark_pass "active bench ${tx_b}->${rx_a} @ ${br}: saw ID ${idb}"
-  else
-    mark_fail "active bench ${tx_b}->${rx_a} @ ${br}: did not see ID ${idb}; see ${cap_ba}"
-  fi
+    local i suffix frame_a frame_b
+    for ((i = 0; i < TX_COUNT; i++)); do
+        suffix=$(printf "%02X" $((i & 0xFF)))
+        frame_a="${ida}#${data_a:0:14}${suffix}"
+        frame_b="${idb}#${data_b:0:14}${suffix}"
+        echo "TX ${tx_a} ${frame_a}" >>"$tx_log"
+        cansend "$tx_a" "$frame_a" >>"$tx_log" 2>&1 || true
+        sleep "$TX_DELAY"
+        echo "TX ${tx_b} ${frame_b}" >>"$tx_log"
+        cansend "$tx_b" "$frame_b" >>"$tx_log" 2>&1 || true
+        sleep "$TX_DELAY"
+    done
+
+    sleep 1
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+
+    {
+        echo "### active bench stats br=${br} run=${run_idx}"
+        date -Is
+        ip -details -statistics link show dev "$tx_a" || true
+        ip -details -statistics link show dev "$tx_b" || true
+        echo
+        echo "### expected"
+        echo "${rx_b} must see ${ida} from ${tx_a}"
+        echo "${rx_a} must see ${idb} from ${tx_b}"
+        echo
+        echo "### any log frame counts"
+        grep -c '^(' "$any_log" || true
+    } >"$stats_log" 2>&1
+
+    if grep -Eq "(^|[[:space:]])${rx_b}[[:space:]]+${ida}#" "$any_log"; then
+        mark_pass "active bench ${tx_a}->${rx_b} @ ${br} run ${run_idx}: saw ID ${ida}"
+    else
+        mark_fail "active bench ${tx_a}->${rx_b} @ ${br} run ${run_idx}: did not see ID ${ida} on ${rx_b}; see ${any_log}"
+    fi
+
+    if grep -Eq "(^|[[:space:]])${rx_a}[[:space:]]+${idb}#" "$any_log"; then
+        mark_pass "active bench ${tx_b}->${rx_a} @ ${br} run ${run_idx}: saw ID ${idb}"
+    else
+        mark_fail "active bench ${tx_b}->${rx_a} @ ${br} run ${run_idx}: did not see ID ${idb} on ${rx_a}; see ${any_log}"
+    fi
 }
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
-  exec sudo "$0" "$@"
+    exec sudo "$0" "$@"
 fi
 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --ifaces) IFACES_CSV="$2"; shift 2 ;;
-    --bitrates) BITRATES_CSV="$2"; shift 2 ;;
-    --rx-seconds) RX_SECONDS="$2"; shift 2 ;;
-    --restart-ms) RESTART_MS="$2"; shift 2 ;;
-    --outdir) OUTDIR="$2"; shift 2 ;;
-    --keep-up) KEEP_UP=1; shift ;;
-    --no-load-module) LOAD_MODULE=0; shift ;;
-    --module-opts) MODULE_OPTS="$2"; shift 2 ;;
-    --endpoint-profile) ENDPOINT_PROFILE="$2"; shift 2 ;;
-    --allow-tx) ALLOW_TX=1; shift ;;
-    --bench-loopback) BENCH_LOOPBACK=1; shift ;;
-    --tx-id-base) TX_ID_BASE="$2"; shift 2 ;;
-    --tx-count) TX_COUNT="$2"; shift 2 ;;
-    --tx-delay) TX_DELAY="$2"; shift 2 ;;
-    --verbose) VERBOSE=1; shift ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
-  esac
+    case "$1" in
+        --ifaces) IFACES_CSV="$2"; shift 2 ;;
+        --bitrates) BITRATES_CSV="$2"; shift 2 ;;
+        --rx-seconds) RX_SECONDS="$2"; shift 2 ;;
+        --restart-ms) RESTART_MS="$2"; shift 2 ;;
+        --outdir) OUTDIR="$2"; shift 2 ;;
+        --keep-up) KEEP_UP=1; shift ;;
+        --no-load-module) LOAD_MODULE=0; shift ;;
+        --module-opts) MODULE_OPTS="$2"; shift 2 ;;
+        --endpoint-profile) ENDPOINT_PROFILE="$2"; shift 2 ;;
+        --allow-tx) ALLOW_TX=1; shift ;;
+        --bench-loopback) BENCH_LOOPBACK=1; shift ;;
+        --tx-id-base) TX_ID_BASE="$2"; shift 2 ;;
+        --tx-count) TX_COUNT="$2"; shift 2 ;;
+        --tx-delay) TX_DELAY="$2"; shift 2 ;;
+        --verbose) VERBOSE=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+    esac
 done
 
 if [[ -z "$OUTDIR" ]]; then
-  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-  else
-    USER_HOME="${HOME:-/root}"
-  fi
-  OUTDIR="${USER_HOME}/Downloads/waveusbcan_b-regression-$(date +%Y%m%d-%H%M%S)"
+    if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+        USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    else
+        USER_HOME="${HOME:-/root}"
+    fi
+    OUTDIR="${USER_HOME}/Downloads/waveusbcan_b-regression-$(date +%Y%m%d-%H%M%S)"
 fi
+
 mkdir -p "$OUTDIR"
 SUMMARY="${OUTDIR}/summary.txt"
 : >"$SUMMARY"
 
-split_csv "$IFACES_CSV"; IFACES=("${__split_out[@]}")
-split_csv "$BITRATES_CSV"; BITRATES=("${__split_out[@]}")
+split_csv "$IFACES_CSV"
+IFACES=("${__split_out[@]}")
+split_csv "$BITRATES_CSV"
+BITRATES=("${__split_out[@]}")
 
 if [[ "$ENDPOINT_PROFILE" != "auto" ]]; then
-  MODULE_OPTS="endpoint_profile=${ENDPOINT_PROFILE} autopm_on_open=0 command_ep_autodetect=1 usb_timeout_ms=1000 usb_retries=5"
+    MODULE_OPTS="endpoint_profile=${ENDPOINT_PROFILE} autopm_on_open=0 command_ep_autodetect=1 usb_timeout_ms=1000 usb_retries=5"
 fi
 
 log "waveUSBCAN_b dual-channel/bitrate regression"
@@ -256,100 +331,103 @@ log "active_tx: allow_tx=${ALLOW_TX} bench_loopback=${BENCH_LOOPBACK}"
 log ""
 
 if [[ "$ALLOW_TX" == "1" && "$BENCH_LOOPBACK" != "1" ]]; then
-  mark_fail "--allow-tx requires --bench-loopback. Refusing active TX."
-  exit 2
+    mark_fail "--allow-tx requires --bench-loopback. Refusing active TX."
+    exit 2
 fi
 
 if [[ "$ALLOW_TX" == "1" ]]; then
-  log "SAFETY: active TX is enabled. Use only on isolated bench CAN wiring, not on a live wheelchair/R-Net bus."
-  log "Sleeping 5 seconds before TX tests; press Ctrl+C to abort."
-  sleep 5
+    log "SAFETY: active TX is enabled. Use only on isolated bench CAN wiring, not on a live wheelchair/R-Net bus."
+    log "Sleeping 5 seconds before TX tests; press Ctrl+C to abort."
+    sleep 5
 fi
 
 {
-  echo "### system"
-  date -Is
-  uname -a
-  echo
-  echo "### loaded module"
-  lsmod | grep -E '^waveusbcan_b\b' || true
-  echo
-  echo "### dkms"
-  dkms status 2>/dev/null | grep -i waveUSBCAN_b || true
-  echo
-  echo "### usb"
-  lsusb | grep -iE '04d8:0053|CANalyst|USBCAN|waveshare|chuangxin' || true
-  lsusb -t || true
-  echo
-  echo "### ip type can before"
-  ip -details link show type can || true
-  echo
-  echo "### module info"
-  modinfo waveusbcan_b 2>/dev/null || true
+    echo "### system"
+    date -Is
+    uname -a
+    echo
+    echo "### loaded module"
+    lsmod | grep -E '^waveusbcan_b\b' || true
+    echo
+    echo "### dkms"
+    dkms status 2>/dev/null | grep -i waveUSBCAN_b || true
+    echo
+    echo "### usb"
+    lsusb | grep -iE '04d8:0053|CANalyst|USBCAN|waveshare|chuangxin' || true
+    lsusb -t || true
+    echo
+    echo "### ip type can before"
+    ip -details link show type can || true
+    echo
+    echo "### module info"
+    modinfo waveusbcan_b 2>/dev/null || true
 } >"${OUTDIR}/environment.txt" 2>&1
 
 if [[ "$LOAD_MODULE" == "1" ]]; then
-  log "[*] Reloading waveusbcan_b with: ${MODULE_OPTS}"
-  modprobe -r waveusbcan_b >/dev/null 2>&1 || true
-  # shellcheck disable=SC2086
-  if modprobe waveusbcan_b ${MODULE_OPTS}; then
-    mark_pass "module loaded"
-  else
-    mark_fail "module load failed"
-  fi
-  sleep 2
+    log "[*] Reloading waveusbcan_b with: ${MODULE_OPTS}"
+    modprobe -r waveusbcan_b >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086
+    if modprobe waveusbcan_b ${MODULE_OPTS}; then
+        mark_pass "module loaded"
+    else
+        mark_fail "module load failed"
+    fi
+    sleep 2
 fi
 
 for iface in "${IFACES[@]}"; do
-  if is_iface_present "$iface"; then
-    mark_pass "interface present: ${iface}"
-  else
-    mark_fail "interface missing: ${iface}"
-  fi
+    if is_iface_present "$iface"; then
+        mark_pass "interface present: ${iface}"
+    else
+        mark_fail "interface missing: ${iface}"
+    fi
 done
 
-# Passive per-interface bitrate sweep.
+run_idx=0
 for br in "${BITRATES[@]}"; do
-  log ""
-  log "=== passive bitrate ${br} ==="
-  for iface in "${IFACES[@]}"; do
-    if ! is_iface_present "$iface"; then
-      mark_fail "skip ${iface} @ ${br}: interface missing"
-      continue
-    fi
-    cfg_log="${OUTDIR}/${iface}_${br}_configure.log"
-    if configure_iface "$iface" "$br" "$cfg_log"; then
-      rx_log="${OUTDIR}/${iface}_${br}_rx.log"
-      capture_iface "$iface" "$br" "$rx_log" "$RX_SECONDS"
-    fi
-  done
+    run_idx=$((run_idx + 1))
+    run_tag=$(printf "run%02d_%s" "$run_idx" "$br")
 
-  # Optional active pair test only when at least two ifaces are present.
-  if [[ "$ALLOW_TX" == "1" && "$BENCH_LOOPBACK" == "1" && "${#IFACES[@]}" -ge 2 ]]; then
     log ""
-    log "=== active bench pair bitrate ${br} ==="
-    a="${IFACES[0]}"; b="${IFACES[1]}"
-    if is_iface_present "$a" && is_iface_present "$b"; then
-      configure_iface "$a" "$br" "${OUTDIR}/${a}_${br}_active_configure.log" || true
-      configure_iface "$b" "$br" "${OUTDIR}/${b}_${br}_active_configure.log" || true
-      active_pair_test "$br" "$a" "$b" "$b" "$a" "${OUTDIR}/active_${br}"
+    log "=== passive bitrate ${br} (${run_tag}) ==="
+    for iface in "${IFACES[@]}"; do
+        if ! is_iface_present "$iface"; then
+            mark_fail "skip ${iface} @ ${br}: interface missing"
+            continue
+        fi
+        cfg_log="${OUTDIR}/${run_tag}_${iface}_configure.log"
+        if configure_iface "$iface" "$br" "$cfg_log"; then
+            rx_log="${OUTDIR}/${run_tag}_${iface}_rx.log"
+            capture_iface "$iface" "$br" "$rx_log" "$RX_SECONDS"
+        fi
+    done
+
+    if [[ "$ALLOW_TX" == "1" && "$BENCH_LOOPBACK" == "1" && "${#IFACES[@]}" -ge 2 ]]; then
+        log ""
+        log "=== active bench pair bitrate ${br} (${run_tag}) ==="
+        a="${IFACES[0]}"
+        b="${IFACES[1]}"
+        if is_iface_present "$a" && is_iface_present "$b"; then
+            configure_iface "$a" "$br" "${OUTDIR}/${run_tag}_${a}_active_configure.log" || true
+            configure_iface "$b" "$br" "${OUTDIR}/${run_tag}_${b}_active_configure.log" || true
+            active_pair_test "$br" "$run_idx" "$a" "$b" "$b" "$a" "${OUTDIR}/active_${run_tag}"
+        fi
     fi
-  fi
 done
 
 {
-  echo "### ip type can after"
-  ip -details link show type can || true
-  echo
-  echo "### dmesg tail"
-  dmesg -T | grep -iE 'waveusbcan|usbcan|canalyst|04d8|0053|can0|can1|COMMAND_|bulk|autopm' | tail -n 240 || true
+    echo "### ip type can after"
+    ip -details link show type can || true
+    echo
+    echo "### dmesg tail"
+    dmesg -T | grep -iE 'waveusbcan|usbcan|canalyst|04d8|0053|can0|can1|COMMAND_|bulk|autopm' | tail -n 240 || true
 } >"${OUTDIR}/after.txt" 2>&1
 
 if [[ "$KEEP_UP" != "1" ]]; then
-  for iface in "${IFACES[@]}"; do
-    ip link set "$iface" down 2>/dev/null || true
-  done
-  log "[*] Interfaces brought down. Use --keep-up to leave them up."
+    for iface in "${IFACES[@]}"; do
+        ip link set "$iface" down 2>/dev/null || true
+    done
+    log "[*] Interfaces brought down. Use --keep-up to leave them up."
 fi
 
 log ""
@@ -358,6 +436,6 @@ log "summary: pass=${pass_count} warn=${warn_count} fail=${fail_count}"
 log "report directory: ${OUTDIR}"
 
 if [[ "$fail_count" -gt 0 ]]; then
-  exit 1
+    exit 1
 fi
 exit 0
