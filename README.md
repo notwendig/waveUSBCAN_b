@@ -1,5 +1,8 @@
 # waveUSBCAN_b
 
+[Deutsch](README.de.md)
+
+
 Version 0.1.11 adds boot and hotplug auto-start support for both SocketCAN channels while keeping the proven v0.1.7+ bring-up path, the v0.1.8 dual-channel/bitrate regression tooling, the v0.1.9 GitHub/Doxygen cleanup, and the v0.1.10 protocol reverse-engineering attribution documentation.
 
 Out-of-tree DKMS Linux SocketCAN driver prototype for Waveshare USB-CAN-B / Chuangxin CANalyst-II style USB-CAN adapters.
