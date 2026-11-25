@@ -4,7 +4,7 @@
 
 [Unit]
 Description=Auto-configure waveUSBCAN_b SocketCAN interfaces
-Documentation=file:/usr/src/waveUSBCAN_b-0.1.12/docs/AUTO_START.md
+Documentation=file:/usr/src/waveUSBCAN_b-0.1.21/docs/AUTO_START.md
 After=systemd-udevd.service
 Wants=systemd-udevd.service
 

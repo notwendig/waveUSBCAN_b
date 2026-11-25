@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.12
+## 0.1.21
 
 - Remove the unused `--verbose` option and simplify the dual-channel regression script.
 
