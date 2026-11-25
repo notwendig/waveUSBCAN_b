@@ -24,7 +24,6 @@ KEEP_UP=0
 TX_ID_BASE="5A0"
 TX_COUNT="1"
 TX_DELAY="0.05"
-VERBOSE=0
 LOAD_MODULE=1
 ENDPOINT_PROFILE="auto"
 MODULE_OPTS="endpoint_profile=auto autopm_on_open=0 command_ep_autodetect=1 usb_timeout_ms=1000 usb_retries=5"
@@ -50,7 +49,6 @@ Options:
   --no-load-module               Do not reload/load waveusbcan_b before tests.
   --module-opts 'opts...'        modprobe options. Default: known-good v0.1.7+ options.
   --endpoint-profile NAME        Shorthand for module endpoint_profile. Default: auto
-  --verbose                      Print more commands.
 
 Bench-only active TX/RX test:
   --allow-tx --bench-loopback    Enable generic test-frame TX between can0 and can1.
@@ -74,15 +72,6 @@ USAGE
 
 log() {
     printf '%s\n' "$*" | tee -a "$SUMMARY"
-}
-
-# helper kept for optional verbose command tracing
-# shellcheck disable=SC2329
-run() {
-    if [[ "$VERBOSE" == "1" ]]; then
-        echo "+ $*" | tee -a "$SUMMARY"
-    fi
-    "$@"
 }
 
 fail_count=0
@@ -112,12 +101,6 @@ split_csv() {
 
 is_iface_present() {
     ip link show "$1" >/dev/null 2>&1
-}
-
-# diagnostic helper kept for manual debugging
-# shellcheck disable=SC2329
-iface_state_line() {
-    ip -details link show "$1" 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g'
 }
 
 iface_has_bitrate() {
@@ -193,11 +176,9 @@ candump_start_any() {
 active_pair_test() {
     local br="$1"
     local run_idx="$2"
-    local tx_a="$3"
-    local rx_b="$4"
-    local tx_b="$5"
-    local rx_a="$6"
-    local outprefix="$7"
+    local iface_a="$3"
+    local iface_b="$4"
+    local outprefix="$5"
 
     if [[ "$ALLOW_TX" != "1" || "$BENCH_LOOPBACK" != "1" ]]; then
         return 0
@@ -221,9 +202,7 @@ active_pair_test() {
     local any_log="${outprefix}_any.log"
     local tx_log="${outprefix}_tx.log"
     local stats_log="${outprefix}_stats.log"
-    : >"$any_log"
     : >"$tx_log"
-    : >"$stats_log"
 
     local pid
     pid=$(candump_start_any "$any_log" "${any_log}.err")
@@ -234,11 +213,11 @@ active_pair_test() {
         suffix=$(printf "%02X" $((i & 0xFF)))
         frame_a="${ida}#${data_a:0:14}${suffix}"
         frame_b="${idb}#${data_b:0:14}${suffix}"
-        echo "TX ${tx_a} ${frame_a}" >>"$tx_log"
-        cansend "$tx_a" "$frame_a" >>"$tx_log" 2>&1 || true
+        echo "TX ${iface_a} ${frame_a}" >>"$tx_log"
+        cansend "$iface_a" "$frame_a" >>"$tx_log" 2>&1 || true
         sleep "$TX_DELAY"
-        echo "TX ${tx_b} ${frame_b}" >>"$tx_log"
-        cansend "$tx_b" "$frame_b" >>"$tx_log" 2>&1 || true
+        echo "TX ${iface_b} ${frame_b}" >>"$tx_log"
+        cansend "$iface_b" "$frame_b" >>"$tx_log" 2>&1 || true
         sleep "$TX_DELAY"
     done
 
@@ -249,27 +228,27 @@ active_pair_test() {
     {
         echo "### active bench stats br=${br} run=${run_idx}"
         date -Is
-        ip -details -statistics link show dev "$tx_a" || true
-        ip -details -statistics link show dev "$tx_b" || true
+        ip -details -statistics link show dev "$iface_a" || true
+        ip -details -statistics link show dev "$iface_b" || true
         echo
         echo "### expected"
-        echo "${rx_b} must see ${ida} from ${tx_a}"
-        echo "${rx_a} must see ${idb} from ${tx_b}"
+        echo "${iface_b} must see ${ida} from ${iface_a}"
+        echo "${iface_a} must see ${idb} from ${iface_b}"
         echo
         echo "### any log frame counts"
         grep -c '^(' "$any_log" || true
     } >"$stats_log" 2>&1
 
-    if grep -Eq "(^|[[:space:]])${rx_b}[[:space:]]+${ida}#" "$any_log"; then
-        mark_pass "active bench ${tx_a}->${rx_b} @ ${br} run ${run_idx}: saw ID ${ida}"
+    if grep -Eq "(^|[[:space:]])${iface_b}[[:space:]]+${ida}#" "$any_log"; then
+        mark_pass "active bench ${iface_a}->${iface_b} @ ${br} run ${run_idx}: saw ID ${ida}"
     else
-        mark_fail "active bench ${tx_a}->${rx_b} @ ${br} run ${run_idx}: did not see ID ${ida} on ${rx_b}; see ${any_log}"
+        mark_fail "active bench ${iface_a}->${iface_b} @ ${br} run ${run_idx}: did not see ID ${ida} on ${iface_b}; see ${any_log}"
     fi
 
-    if grep -Eq "(^|[[:space:]])${rx_a}[[:space:]]+${idb}#" "$any_log"; then
-        mark_pass "active bench ${tx_b}->${rx_a} @ ${br} run ${run_idx}: saw ID ${idb}"
+    if grep -Eq "(^|[[:space:]])${iface_a}[[:space:]]+${idb}#" "$any_log"; then
+        mark_pass "active bench ${iface_b}->${iface_a} @ ${br} run ${run_idx}: saw ID ${idb}"
     else
-        mark_fail "active bench ${tx_b}->${rx_a} @ ${br} run ${run_idx}: did not see ID ${idb} on ${rx_a}; see ${any_log}"
+        mark_fail "active bench ${iface_b}->${iface_a} @ ${br} run ${run_idx}: did not see ID ${idb} on ${iface_a}; see ${any_log}"
     fi
 }
 
@@ -293,7 +272,6 @@ while [[ $# -gt 0 ]]; do
         --tx-id-base) TX_ID_BASE="$2"; shift 2 ;;
         --tx-count) TX_COUNT="$2"; shift 2 ;;
         --tx-delay) TX_DELAY="$2"; shift 2 ;;
-        --verbose) VERBOSE=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     esac
@@ -410,7 +388,7 @@ for br in "${BITRATES[@]}"; do
         if is_iface_present "$a" && is_iface_present "$b"; then
             configure_iface "$a" "$br" "${OUTDIR}/${run_tag}_${a}_active_configure.log" || true
             configure_iface "$b" "$br" "${OUTDIR}/${run_tag}_${b}_active_configure.log" || true
-            active_pair_test "$br" "$run_idx" "$a" "$b" "$b" "$a" "${OUTDIR}/active_${run_tag}"
+            active_pair_test "$br" "$run_idx" "$a" "$b" "${OUTDIR}/active_${run_tag}"
         fi
     fi
 done

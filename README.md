@@ -71,8 +71,8 @@ candump can0
 
 ```bash
 sudo dnf install -y gcc make dkms kernel-devel kernel-headers elfutils-libelf-devel iproute can-utils usbutils
-unzip waveUSBCAN_b-0.1.11.zip
-cd waveUSBCAN_b-0.1.11
+unzip waveUSBCAN_b-0.1.12.zip
+cd waveUSBCAN_b-0.1.12
 sudo ./scripts/install.sh
 ```
 
@@ -100,8 +100,8 @@ On Fedora it is normal that `dnf` installs a newer kernel while DKMS still build
 ```bash
 sudo apt update
 sudo apt install -y build-essential dkms linux-headers-$(uname -r) iproute2 can-utils usbutils
-unzip waveUSBCAN_b-0.1.11.zip
-cd waveUSBCAN_b-0.1.11
+unzip waveUSBCAN_b-0.1.12.zip
+cd waveUSBCAN_b-0.1.12
 sudo ./scripts/install.sh
 ```
 

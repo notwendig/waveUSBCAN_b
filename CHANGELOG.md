@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.12
+
+- Remove the unused `--verbose` option and simplify the dual-channel regression script.
+
 ## 0.1.11
 
 - Add boot-time and USB hotplug auto-start support for both SocketCAN channels.
